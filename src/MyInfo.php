@@ -3,9 +3,17 @@
 namespace CarroPublic\MyInfo;
 
 use File;
-use Jose\Loader;
 use GuzzleHttp\Client;
-use Jose\Factory\JWKFactory;
+use Jose\Component\Encryption\JWELoader;
+use Jose\Component\Encryption\JWEDecrypter;
+use Jose\Component\KeyManagement\JWKFactory;
+use Jose\Component\Core\AlgorithmManagerFactory;
+use Jose\Component\Encryption\Compression\Deflate;
+use Jose\Component\Encryption\Serializer\CompactSerializer;
+use Jose\Component\Encryption\Algorithm\KeyEncryption\RSAOAEP;
+use Jose\Component\Encryption\Serializer\JWESerializerManager;
+use Jose\Component\Encryption\Algorithm\ContentEncryption\A256GCM;
+use Jose\Component\Encryption\Compression\CompressionMethodManager;
 
 class MyInfo
 {
@@ -144,14 +152,27 @@ class MyInfo
             ]
         );
 
-        $loader = new Loader();
-        $userData = $loader->loadAndDecryptUsingKey(
-            $encryptedUserData, // String to load and decrypt
-            $key,               // The symmetric or private key
-            ['RSA-OAEP'],       // A list of allowed key encryption algorithms
-            ['A256GCM'],        // A list of allowed content encryption algorithms
-            $recipient_index    // If decrypted, this variable will be set with the recipient index used to decrypt
+        $algorithmManagerFactory = new AlgorithmManagerFactory([
+            new A256GCM(),
+            new RSAOAEP(),
+        ]);
+
+        $compressionMethod = new CompressionMethodManager([
+            new Deflate(),
+        ]);
+
+        $jweDecrypter = new JWEDecrypter(
+            $algorithmManagerFactory->create(['RSA-OAEP']),
+            $algorithmManagerFactory->create(['A256GCM']),
+            $compressionMethod
         );
+
+        $serializer = new JWESerializerManager([
+            new CompactSerializer()
+        ]);
+
+        $jweLoader = new JWELoader($serializer, $jweDecrypter, null);
+        $userData = $jweLoader->loadAndDecryptWithKey($encryptedUserData, $key, $recipient_index);
         
         return $this->getJWTPayload($userData->getPayload());
     }
